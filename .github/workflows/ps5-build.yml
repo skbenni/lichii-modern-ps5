@@ -145,6 +145,12 @@ jobs:
             "$UPSTREAM/ps5/menu/ui/lichii.rcss" \
             "$SDK/bin/prospero-lld" \
             "$SDK/bin/llvm-nm" \
+            "$SDK/bin/prospero-clang" \
+            "$SDK/bin/prospero-clang++" \
+            "$SDK/bin/prospero-ar" \
+            "$SDK/bin/prospero-ranlib" \
+            "$SDK/bin/prospero-nm" \
+            "$SDK/bin/prospero-strip" \
             "$SDK/target/lib/libps5platform.a" \
             "$SDK/target/lib/libc++.a" \
             "$SDK/target/lib/libc++abi.a" \
@@ -162,9 +168,14 @@ jobs:
             "$UPSTREAM/.deps/radv-release/lib/libvulkan_radeon.ps5.a"; do
             [[ -e $file ]] || { echo "fehlt: $file" >&2; exit 2; }
           done
-          grep -q 'PPSA99011' "$UPSTREAM/ps5/menu/storage_paths.h"
-          grep -q 'PPSA99011' "$UPSTREAM/ps5/sce_sys/param.json"
-          python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$UPSTREAM/ps5/sce_sys/param.json"
+          grep -q 'PPSA99010' "$UPSTREAM/ps5/menu/storage_paths.h"
+          python3 - "$UPSTREAM/ps5/sce_sys/param.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              data = json.load(handle)
+          assert data["titleId"] == "PPSA99010", data["titleId"]
+          PY
           test -x tools/build-full.sh
 
       - name: PS5-Titel bauen
