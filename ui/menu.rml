@@ -1,0 +1,48 @@
+<rml>
+  <head>
+    <link type="text/rcss" href="lichii-modern.rcss" />
+    <title>Lichii Modern PS5</title>
+  </head>
+  <body>
+    <div id="header">
+      <div id="logo">Lichii</div>
+      <div id="tabs">
+        <div class="tab active" id="tab-games">Spiele</div>
+        <div class="tab" id="tab-settings">Einstellungen</div>
+      </div>
+      <div id="clock"></div>
+    </div>
+
+    <div id="games-view">
+      <div id="carousel-row"></div>
+      <div id="empty" class="hidden">
+        <div class="empty-title">Keine Spiele gefunden</div>
+        <div class="empty-body">Lege deine eigenen Dumps nach /data/lichii/roms</div>
+      </div>
+      <div id="details">
+        <div id="game-title"></div>
+        <div id="game-meta"></div>
+      </div>
+      <div id="message" class="hidden"></div>
+    </div>
+
+    <div id="settings-view" class="hidden">
+      <div id="categories"></div>
+      <div id="panel">
+        <div id="page-title">Einstellungen</div>
+        <div id="page-position"></div>
+        <div id="rows"></div>
+      </div>
+      <div id="description"></div>
+    </div>
+
+    <div id="footer">
+      <div id="hints">
+        <span class="hint">X Start</span>
+        <span class="hint">O Zurueck</span>
+        <span class="hint">L1/R1 Tab</span>
+        <span class="hint">Optionen Beenden</span>
+      </div>
+    </div>
+  </body>
+</rml>

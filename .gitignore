@@ -1,0 +1,8 @@
+build-host/
+build-ps5/
+third_party/
+*.zip
+*.bin
+*.o
+*.a
+.DS_Store
