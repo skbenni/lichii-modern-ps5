@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential clang lld llvm-dev libclang-dev libclc-dev \
+            build-essential clang lld llvm-dev libclang-dev libclc-20-dev \
             spirv-tools glslang-tools cmake ninja-build pkg-config \
             wget curl unzip zip rsync util-linux \
             python3 python3-pip python3-mako python3-yaml python3-pyelftools \
