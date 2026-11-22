@@ -57,10 +57,10 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential clang lld llvm-dev libclang-dev libclc-18-dev \
+            build-essential clang lld llvm-dev libclang-dev libclang-rt-18-dev libclc-18-dev \
             libllvmspirvlib-18-dev spirv-tools glslang-tools \
             cmake ninja-build pkg-config \
-            wget curl unzip zip rsync util-linux \
+            wget curl unzip zip rsync util-linux nasm \
             python3 python3-pip python3-mako python3-yaml python3-pyelftools \
             zlib1g-dev libexpat1-dev libelf-dev libzstd-dev
           pipx install meson==1.7.0
@@ -81,6 +81,30 @@ jobs:
           ln -sfn "$PWD/third_party/PS5_Lichii/.deps/native/ps5-payload-sdk" \
             third_party/PS5_Vulkan/.deps/native/ps5-payload-sdk
 
+      - name: PS5-Native-Tool und libc.prx bauen
+        working-directory: src/third_party/PS5_Vulkan
+        run: |
+          set -euo pipefail
+          bash tools/setup-native-dependencies.sh --skip-sdk >/dev/null
+          if [[ ! -f runtime/libc.prx ]]; then
+            bash tools/rebuild-libc.sh
+          fi
+          mkdir -p build/host
+          if [[ -x build/runtime-shim/ps5-native-tool ]]; then
+            cp build/runtime-shim/ps5-native-tool build/host/ps5-native-tool
+          else
+            ZLIB_ROOT="$PWD/.deps/native/zlib/root"
+            ZLIB_ARCHIVE="$(find "$ZLIB_ROOT" -type f -name libz.a -print -quit)"
+            test -n "$ZLIB_ARCHIVE"
+            clang++ -std=c++20 -O2 -Wall -Wextra -Werror \
+              -I "$ZLIB_ROOT/usr/include" \
+              tooling/native/native_app_builder.cpp tooling/native/self_container.cpp \
+              tooling/native/elf_object.cpp tooling/native/sce_module_writer.cpp \
+              "$ZLIB_ARCHIVE" -o build/host/ps5-native-tool
+          fi
+          test -x build/host/ps5-native-tool
+          test -s runtime/libc.prx
+
       - name: RADV bauen
         working-directory: src/third_party/PS5_Vulkan
         run: bash tools/build-radv.sh release
@@ -96,6 +120,52 @@ jobs:
           if [[ -d "$RADV/include" ]]; then cp -r "$RADV/include" "$DEST/"; fi
           if [[ -f "$RADV/PROVENANCE.txt" ]]; then cp "$RADV/PROVENANCE.txt" "$DEST/"; fi
           test -s "$DEST/lib/libvulkan_radeon.ps5.a"
+
+      - name: Vorabpruefung
+        working-directory: src
+        run: |
+          set -euo pipefail
+          for command in git python3 ninja meson cmake pkg-config nasm curl wget unzip zip \
+            sha256sum flock rsync clang clang++ llvm-ar llvm-nm make tar nproc awk comm cmp install sed; do
+            command -v "$command" >/dev/null || { echo "fehlt: $command" >&2; exit 2; }
+          done
+          UPSTREAM="$PWD/third_party/PS5_Lichii"
+          VULKAN="$PWD/third_party/PS5_Vulkan"
+          SDK="$UPSTREAM/.deps/native/ps5-payload-sdk"
+          BUILTINS="$(clang --print-resource-dir)/lib/linux/libclang_rt.builtins-x86_64.a"
+          for file in \
+            "$UPSTREAM/ps5/tools/build.sh" \
+            "$UPSTREAM/ps5/tools/link-title.sh" \
+            "$UPSTREAM/ps5/tools/gen-setting-names.py" \
+            "$UPSTREAM/ps5/cmake/ps5-toolchain.cmake" \
+            "$UPSTREAM/ps5/menu/storage_paths.h" \
+            "$UPSTREAM/ps5/sce_sys/param.json" \
+            "$UPSTREAM/ps5/sce_sys/icon0.png" \
+            "$UPSTREAM/ps5/menu/ui/lichii.rml" \
+            "$UPSTREAM/ps5/menu/ui/lichii.rcss" \
+            "$SDK/bin/prospero-lld" \
+            "$SDK/bin/llvm-nm" \
+            "$SDK/target/lib/libps5platform.a" \
+            "$SDK/target/lib/libc++.a" \
+            "$SDK/target/lib/libc++abi.a" \
+            "$SDK/target/lib/libunwind.a" \
+            "$BUILTINS" \
+            "$VULKAN/build/host/ps5-native-tool" \
+            "$VULKAN/tools/radv-link.sh" \
+            "$VULKAN/tooling/prospero-clang18" \
+            "$VULKAN/tooling/native/app_crt.cpp" \
+            "$VULKAN/tooling/native/app-symbols.map" \
+            "$VULKAN/vendor/ps5/sdk/stubs/agc_canary_link_stub.c" \
+            "$VULKAN/vendor/ps5/sdk/stubs/agc_driver_canary_link_stub.c" \
+            "$VULKAN/runtime/libc.prx" \
+            "$VULKAN/runtime/libc.prx.sha256" \
+            "$UPSTREAM/.deps/radv-release/lib/libvulkan_radeon.ps5.a"; do
+            [[ -e $file ]] || { echo "fehlt: $file" >&2; exit 2; }
+          done
+          grep -q 'PPSA99011' "$UPSTREAM/ps5/menu/storage_paths.h"
+          grep -q 'PPSA99011' "$UPSTREAM/ps5/sce_sys/param.json"
+          python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$UPSTREAM/ps5/sce_sys/param.json"
+          test -x tools/build-full.sh
 
       - name: PS5-Titel bauen
         working-directory: src
