@@ -44,15 +44,15 @@ import sys
 
 path = pathlib.Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
-old = """    if (LINUX OR FREEBSD)
-        add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-mtls-dialect=gnu2>)
-    endif()
-"""
-new = """    if (LINUX OR FREEBSD)
-        if (NOT LICHII_PS5)
+old = """        if (LINUX OR FREEBSD)
             add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-mtls-dialect=gnu2>)
         endif()
-    endif()
+"""
+new = """        if (LINUX OR FREEBSD)
+            if (NOT LICHII_PS5)
+                add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-mtls-dialect=gnu2>)
+            endif()
+        endif()
 """
 if old not in text:
     raise SystemExit("mtls-dialect patch target not found")
