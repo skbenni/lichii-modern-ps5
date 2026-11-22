@@ -1,0 +1,134 @@
+name: PS5 Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Nach dem Build ein GitHub-Release erstellen"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LICHII_REVISION: a2c1edb8820cda12a6a3e4242ef509100d26c95a
+  TITLE_ID: PPSA99011
+
+jobs:
+  ps5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 0
+
+      - name: PS5_PayloadSDK auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: mihawk-99/PS5_PayloadSDK
+          path: src/third_party/PS5_PayloadSDK
+          fetch-depth: 0
+
+      - name: PS5_Vulkan auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: mihawk-99/PS5_Vulkan
+          path: src/third_party/PS5_Vulkan
+          fetch-depth: 0
+
+      - name: PS5_Mesa auschecken
+        uses: actions/checkout@v4
+        with:
+          repository: mihawk-99/PS5_Mesa
+          path: src/third_party/PS5_Mesa
+          fetch-depth: 0
+
+      - name: Build-Werkzeuge installieren
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang lld llvm-dev libclang-dev libclc-dev \
+            spirv-tools glslang-tools cmake ninja-build pkg-config \
+            wget curl unzip zip rsync util-linux \
+            python3 python3-pip python3-mako python3-yaml python3-pyelftools \
+            zlib1g-dev libexpat1-dev libelf-dev libzstd-dev
+          pipx install meson==1.7.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: PS5_Lichii und SDK vorbereiten
+        working-directory: src
+        run: |
+          set -euo pipefail
+          mkdir -p third_party
+          if [[ ! -d third_party/PS5_Lichii/.git ]]; then
+            git clone https://codeberg.org/mihawk/PS5_Lichii.git third_party/PS5_Lichii
+          fi
+          git -C third_party/PS5_Lichii fetch --force origin "$LICHII_REVISION"
+          git -C third_party/PS5_Lichii checkout --detach "$LICHII_REVISION"
+          bash third_party/PS5_Lichii/ps5/tools/setup-sdk.sh
+          mkdir -p third_party/PS5_Vulkan/.deps/native
+          ln -sfn "$PWD/third_party/PS5_Lichii/.deps/native/ps5-payload-sdk" \
+            third_party/PS5_Vulkan/.deps/native/ps5-payload-sdk
+
+      - name: RADV bauen
+        working-directory: src/third_party/PS5_Vulkan
+        run: bash tools/build-radv.sh release
+
+      - name: RADV-Archiv einsetzen
+        working-directory: src
+        run: |
+          set -euo pipefail
+          RADV="$PWD/third_party/PS5_Vulkan/.deps/native/radv-release"
+          DEST="$PWD/third_party/PS5_Lichii/.deps/radv-release"
+          install -d "$DEST/lib"
+          install -m 0644 "$RADV/lib/libvulkan_radeon.ps5.a" "$DEST/lib/"
+          if [[ -d "$RADV/include" ]]; then cp -r "$RADV/include" "$DEST/"; fi
+          if [[ -f "$RADV/PROVENANCE.txt" ]]; then cp "$RADV/PROVENANCE.txt" "$DEST/"; fi
+          test -s "$DEST/lib/libvulkan_radeon.ps5.a"
+
+      - name: PS5-Titel bauen
+        working-directory: src
+        run: ./tools/build-full.sh
+
+      - name: Ergebnis pruefen
+        working-directory: src
+        run: |
+          set -euo pipefail
+          test -f "dist/$TITLE_ID/eboot.bin"
+          find "dist/$TITLE_ID" -maxdepth 2 -type f | sort
+          du -sh "dist/$TITLE_ID"
+
+      - name: Paket schnueren
+        working-directory: src
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          (cd "dist/$TITLE_ID" && zip -r "../../release/${TITLE_ID}.zip" .)
+          test -s "release/${TITLE_ID}.zip"
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TITLE_ID }}-ps5
+          path: src/release/${{ env.TITLE_ID }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Release erstellen
+        if: ${{ inputs.release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ps5-${{ github.run_number }}
+          name: PS5 Build ${{ github.run_number }}
+          files: src/release/${{ env.TITLE_ID }}.zip
+          generate_release_notes: true
